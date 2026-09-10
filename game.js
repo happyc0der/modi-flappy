@@ -1266,8 +1266,8 @@
     RENDER_SCALE = clamp(window.devicePixelRatio || 1, 1, 2);
     canvas.width = Math.round(W * RENDER_SCALE);
     canvas.height = Math.round(H * RENDER_SCALE);
-    canvas.style.width = `${W}px`;
-    canvas.style.height = `${H}px`;
+    // Display size is left to the stylesheet, which shrinks the canvas on short
+    // viewports. Setting it inline here would override that and clip the game.
     ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
     buildSkyGradients();
   }
@@ -1469,6 +1469,7 @@
     state = "playing";
     paused = false;
     graceSteps = GRACE_STEPS;
+    resetProbe(); // don't judge the machine on the first frames of a new run
     ensureMusic();
     loadFlapBuffer();
     updateGraceHUD();
@@ -1961,36 +1962,69 @@
   // ==========================================================================
   // QUALITY AUTO-DETECT
   //
-  // Measures how long render() actually takes rather than the frame interval,
-  // so it works the same on a 60Hz and a 120Hz display.
+  // Watches the frame rate the machine actually delivers. Timing render() with
+  // performance.now() does NOT work here: that measures only the JS cost of
+  // issuing canvas commands, the GPU work is asynchronous and uncounted, and it
+  // reads as ~0.1ms on every tier -- so it can never detect a struggling
+  // machine, which is the only thing this is for.
+  //
+  // The test is a plain absolute one: is the median frame interval worse than
+  // SLOW_FRAME_MS, i.e. are we sustaining under ~48fps? Comparing against the
+  // window's FASTEST frame does not work -- a uniformly overloaded machine has
+  // uniformly slow frames, so the fastest frame tracks the slow rate too and
+  // the ratio never fires.
+  //
+  // Tradeoff: a display whose native rate really is 30Hz looks identical to a
+  // 60Hz machine running at half rate, so it gets downgraded too. That is rare,
+  // Low still looks coherent, and the manual override in Settings covers it --
+  // whereas failing to catch a struggling 60Hz machine defeats the feature.
   // ==========================================================================
 
-  let probeFrames = 0;
-  let probeTotal = 0;
-  let probeDone = false;
+  const TIER_ORDER = ["high", "medium", "low"];
+  const PROBE_WINDOW = 90;
+  const PROBE_SETTLE = 30; // frames ignored after a tier change or a new run
+  const SLOW_FRAME_MS = 21; // sustained median worse than this is ~under 48fps
+
+  let frameDeltas = [];
+  let probeSettle = PROBE_SETTLE;
 
   function resolveTier() {
-    if (settings.quality !== "auto") {
-      probeDone = true;
-      return settings.quality;
-    }
-    return "high"; // start high, probe, downgrade if the machine can't hold it
+    return settings.quality === "auto" ? "high" : settings.quality;
   }
 
-  function probeQuality(renderMs) {
-    if (probeDone || settings.quality !== "auto") return;
-    probeFrames++;
-    if (probeFrames <= 12) return; // ignore warm-up frames
-    probeTotal += renderMs;
-    if (probeFrames < 100) return;
+  function resetProbe() {
+    frameDeltas.length = 0;
+    probeSettle = PROBE_SETTLE;
+  }
 
-    probeDone = true;
-    const avg = probeTotal / (probeFrames - 12);
-    const want = avg < 4 ? "high" : avg < 9 ? "medium" : "low";
-    if (want !== tier) {
-      tier = want;
-      buildSprites();
+  function probeQuality(deltaMs) {
+    if (settings.quality !== "auto") return;
+    if (tier === "low") return; // nothing left to drop
+    // Only judge the heaviest scene, and only when frames are actually being
+    // presented -- a paused or backgrounded tab says nothing about capability.
+    if (state !== "playing" || paused || document.hidden) {
+      resetProbe();
+      return;
     }
+    if (probeSettle > 0) {
+      probeSettle--;
+      return;
+    }
+
+    frameDeltas.push(deltaMs);
+    if (frameDeltas.length < PROBE_WINDOW) return;
+
+    const sorted = [...frameDeltas].sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
+    frameDeltas.length = 0;
+
+    if (median > SLOW_FRAME_MS) {
+      tier = TIER_ORDER[Math.min(TIER_ORDER.indexOf(tier) + 1, TIER_ORDER.length - 1)];
+      buildSprites();
+      probeSettle = PROBE_SETTLE;
+    }
+    // Downgrade only. Auto-upgrading would oscillate: the lighter tier runs
+    // fast, which would immediately argue for going back up.
   }
 
   // ==========================================================================
@@ -2001,7 +2035,8 @@
     if (!lastTime) lastTime = ts;
     // clamp below at 0 as well as above: a non-monotonic timestamp would
     // otherwise drive the accumulator negative and stall the simulation.
-    accumulator += clamp(ts - lastTime, 0, MAX_FRAME_MS);
+    const frameMs = clamp(ts - lastTime, 0, MAX_FRAME_MS);
+    accumulator += frameMs;
     lastTime = ts;
 
     let steps = 0;
@@ -2012,9 +2047,8 @@
     }
     if (steps === MAX_STEPS_PER_FRAME) accumulator = 0;
 
-    const t0 = performance.now();
     render();
-    probeQuality(performance.now() - t0);
+    probeQuality(frameMs);
 
     requestAnimationFrame(loop);
   }
@@ -2132,11 +2166,11 @@
   });
 
   function applyQualitySetting() {
+    // "auto" keeps whatever tier is current and lets the probe take over again;
+    // an explicit choice pins it. Only rebuild when the tier actually changes.
     const want = settings.quality === "auto" ? tier : settings.quality;
-    probeDone = settings.quality !== "auto";
-    probeFrames = 0;
-    probeTotal = 0;
-    if (want !== tier || settings.quality !== "auto") {
+    resetProbe();
+    if (want !== tier) {
       tier = want;
       buildSprites();
     }

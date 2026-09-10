@@ -25,16 +25,19 @@ body {
     0 0 0 1px rgba(255, 190, 110, 0.12);
   border-radius: 12px;
   overflow: hidden;
-  /* Scale the whole 540x810 stage down if the viewport is short, so the game
-     always fits without touching any of the logical drawing units. */
-  transform-origin: center center;
-  transform: scale(min(1, calc((100vh - 32px) / 810)));
 }
 
+/* The canvas sizes itself down on short viewports, and #wrap shrinks with it.
+   Doing this with `transform: scale()` instead would leave the layout box at
+   full size (breaking the flex centring) and resample the art; here the backing
+   store stays at 540x810 x dpr, so shrinking only makes it sharper. */
 canvas {
   display: block;
   background: #6b7d8a;
   touch-action: none;
+  height: min(810px, calc(100vh - 32px));
+  width: auto;
+  aspect-ratio: 540 / 810;
 }
 
 /* ---------------- HUD ---------------- */
