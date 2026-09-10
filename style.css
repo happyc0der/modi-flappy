@@ -1,0 +1,301 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background:
+    radial-gradient(ellipse at 50% 0%, #2a1d0e 0%, #140d05 60%, #0b0703 100%);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #f5e6c8;
+  overflow: hidden;
+}
+
+#wrap {
+  position: relative;
+  flex: 0 0 auto;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 190, 110, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  /* Scale the whole 540x810 stage down if the viewport is short, so the game
+     always fits without touching any of the logical drawing units. */
+  transform-origin: center center;
+  transform: scale(min(1, calc((100vh - 32px) / 810)));
+}
+
+canvas {
+  display: block;
+  background: #6b7d8a;
+  touch-action: none;
+}
+
+/* ---------------- HUD ---------------- */
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  padding: 16px 18px;
+  z-index: 10;
+}
+
+#score {
+  font-size: 3.2rem;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  color: #ffd54f;
+  text-shadow:
+    0 3px 0 #000,
+    0 0 18px rgba(255, 200, 80, 0.55);
+}
+
+#hint {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+#grace {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #8dff8d;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 0 #000, 0 0 16px rgba(80, 255, 120, 0.4);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------------- Panels ---------------- */
+
+.panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px;
+  text-align: center;
+  z-index: 20;
+  background: rgba(12, 8, 4, 0.82);
+  backdrop-filter: blur(7px) saturate(0.85);
+  -webkit-backdrop-filter: blur(7px) saturate(0.85);
+}
+
+#settings {
+  z-index: 30;
+  justify-content: flex-start;
+  padding-top: 42px;
+  overflow-y: auto;
+}
+
+.panel h1 {
+  font-size: 1.9rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #ff9933;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+.panel h2 {
+  font-size: 1.45rem;
+  color: #ff9933;
+}
+
+.panel > p {
+  font-size: 0.95rem;
+  max-width: 360px;
+  line-height: 1.5;
+  opacity: 0.88;
+}
+
+.panel .note {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0.62;
+  margin-bottom: 10px;
+  max-width: none;
+}
+
+.best {
+  font-size: 0.85rem !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffd54f;
+  opacity: 0.85 !important;
+}
+
+#game-over-msg {
+  font-size: 1.15rem !important;
+  font-weight: 700;
+  opacity: 1 !important;
+}
+
+/* ---------------- Settings ---------------- */
+
+#settings section {
+  width: 100%;
+  max-width: 340px;
+  text-align: left;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 190, 110, 0.12);
+}
+
+#settings section:last-of-type {
+  border-bottom: none;
+}
+
+#settings h3 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #ff9933;
+  opacity: 0.8;
+  margin-bottom: 10px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 76px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 0.88rem;
+}
+
+.field input[type="range"] {
+  width: 100%;
+  accent-color: #ff9933;
+  cursor: pointer;
+}
+
+.field .val {
+  min-width: 44px;
+  text-align: right;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.select {
+  width: 100%;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #ffd54f;
+  background: #2a2218;
+  border: 1px solid #5c4a2a;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ---------------- Buttons ---------------- */
+
+.menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.btn {
+  padding: 12px 24px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.12s ease;
+}
+
+.btn.primary {
+  background: linear-gradient(#ffa447, #cc6600);
+  color: #fff;
+  box-shadow: 0 4px 0 #803300;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.btn.secondary {
+  background: #352c22;
+  color: #f5e6c8;
+  border: 1px solid #5c4a2a;
+  box-shadow: 0 4px 0 #150f08;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #803300;
+}
+
+.btn.secondary:active {
+  box-shadow: 0 1px 0 #150f08;
+}
+
+.btn:focus-visible,
+.bind-btn:focus-visible,
+.select:focus-visible {
+  outline: 2px solid #ffd54f;
+  outline-offset: 2px;
+}
+
+.bind-btn {
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border: 1px solid #5c4a2a;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #2a2218;
+  color: #ffd54f;
+  min-width: 118px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.bind-btn:hover {
+  border-color: #8a6f3e;
+}
+
+.bind-btn.listening {
+  border-color: #ff9933;
+  box-shadow: 0 0 0 2px rgba(255, 153, 51, 0.35);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bind-btn.listening { animation: none; }
+  .btn { transition: none; }
+}

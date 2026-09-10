@@ -1,0 +1,3 @@
+# No Python package dependencies are required.
+# Python 3 is only used to run a local static file server:
+# python3 -m http.server 8081

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laudena Bhojayam Flappy</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="540" height="810"></canvas>
+    <div id="hud">
+      <p id="score" class="hidden">0</p>
+      <p id="hint" class="hidden"></p>
+      <p id="grace" class="hidden"></p>
+    </div>
+
+    <div id="main-menu" class="panel">
+      <h1>Laudena Bhojayam Flappy</h1>
+      <p>Flap through the overflowing sewers of the slum!</p>
+      <p id="menu-best" class="best">Best: 0</p>
+      <div class="menu-actions">
+        <button id="menu-start" class="btn primary" type="button">Start Game</button>
+        <button id="menu-settings" class="btn secondary" type="button">Settings</button>
+      </div>
+    </div>
+
+    <div id="game-over" class="panel hidden">
+      <h1>Game Over!</h1>
+      <p id="game-over-msg">Score: 0</p>
+      <p id="game-over-best" class="best">Best: 0</p>
+      <div class="menu-actions">
+        <button id="retry" class="btn primary" type="button">Try Again</button>
+        <button id="go-main" class="btn secondary" type="button">Main Menu</button>
+        <button id="go-settings" class="btn secondary" type="button">Settings</button>
+      </div>
+    </div>
+
+    <div id="settings" class="panel hidden">
+      <h2>Settings</h2>
+      <section>
+        <h3>Volume</h3>
+        <label class="field">
+          <span>Music</span>
+          <input id="music-vol" type="range" min="0" max="100" value="45">
+          <span id="music-vol-val" class="val">45%</span>
+        </label>
+        <label class="field">
+          <span>SFX</span>
+          <input id="sfx-vol" type="range" min="0" max="100" value="80">
+          <span id="sfx-vol-val" class="val">80%</span>
+        </label>
+      </section>
+      <section>
+        <h3>Graphics</h3>
+        <p class="note">Affects decoration only — difficulty is identical on every setting.</p>
+        <label class="field">
+          <span>Quality</span>
+          <select id="quality" class="select">
+            <option value="auto">Auto</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <span class="val"></span>
+        </label>
+      </section>
+      <section>
+        <h3>Controls</h3>
+        <p class="note">Click a button, then press the key you want. Esc cancels.</p>
+        <label class="field">
+          <span>Flap</span>
+          <button id="bind-flap" class="bind-btn" type="button">Space</button>
+        </label>
+        <label class="field">
+          <span>Alt flap</span>
+          <button id="bind-flap-alt" class="bind-btn" type="button">↑</button>
+        </label>
+        <label class="field">
+          <span>Restart</span>
+          <button id="bind-restart" class="bind-btn" type="button">R</button>
+        </label>
+      </section>
+      <div class="menu-actions">
+        <button id="settings-reset" class="btn secondary" type="button">Reset defaults</button>
+        <button id="settings-back" class="btn primary" type="button">Back</button>
+      </div>
+    </div>
+  </div>
+  <audio id="bg-music" src="assets/audio/theme.mp3" loop preload="auto"></audio>
+  <script src="game.js"></script>
+</body>
+</html>
