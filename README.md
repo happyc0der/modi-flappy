@@ -116,6 +116,26 @@ offscreen canvas from `makeSprite(w, h, drawFn)`. To swap the character for a bi
 replace `buildModi()` with something that draws an `Image` into the same
 `MODI_W × MODI_H` box; nothing downstream needs to change.
 
+## License
+
+Copyright (C) 2026 happyc0der.
+
+Modi Flappy is free software, released under the **GNU General Public License,
+version 3 or (at your option) any later version**. The full text is in
+[LICENSE](LICENSE).
+
+That means you're free to run it, study it, change it and pass it on — and if you
+distribute a modified version, you have to pass those same freedoms along with it,
+source included. Copyleft: the freedom travels with the code.
+
+```
+SPDX-License-Identifier: GPL-3.0-or-later
+```
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
 ## Notes
 
 - **The crash sound is explicit.** `assets/audio/flap.mp3` is a clip of Hindi

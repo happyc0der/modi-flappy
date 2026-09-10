@@ -1,3 +1,23 @@
+/*
+ * Modi Flappy -- a Flappy Bird knock-off set in a Mumbai slum.
+ * Copyright (C) 2026  happyc0der
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 (() => {
   "use strict";
 
@@ -1641,6 +1661,7 @@
     popups.length = 0;
     lastGapCenter = H / 2;
     pipeSeq = 0;
+    graceSteps = 0;
     flapAnim = 0;
     shake = 0;
     flash = 0;
@@ -1669,8 +1690,7 @@
     paused = false;
     graceSteps = GRACE_STEPS;
     resetProbe(); // don't judge the machine on the first frames of a new run
-    loadAudioBuffers();
-    syncMusicToState();
+    syncMusicToState(); // loads the audio buffers on first use
     updateGraceHUD();
   }
 
@@ -2286,13 +2306,7 @@
     hideAllPanels();
     mainMenu.classList.remove("hidden");
     showHud(false);
-    graceSteps = 0;
-    pipes.length = 0;
-    particles.length = 0;
-    popups.length = 0;
-    bird.y = H / 2;
-    bird.vy = 0;
-    bird.rot = 0;
+    resetRun();
     menuBest.textContent = `Best: ${settings.highScore}`;
   }
 
