@@ -1,0 +1,18 @@
+# Local tool state
+.claude/
+
+# macOS
+.DS_Store
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Throwaway harnesses used to drive the game headlessly during development.
+# These are generated copies of index.html / game.js with requestAnimationFrame
+# stubbed so frames can be pumped manually; they are never part of the build.
+_shot.*
+_probe.*
+_old/

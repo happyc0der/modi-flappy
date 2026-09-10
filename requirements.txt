@@ -1,3 +1,33 @@
-# No Python package dependencies are required.
-# Python 3 is only used to run a local static file server:
-# python3 -m http.server 8081
+# Modi Flappy — runtime requirements
+#
+# There are no Python package dependencies, so this file is intentionally empty
+# of installable requirements. `pip install -r requirements.txt` is a no-op and
+# will succeed.
+#
+# The game is plain HTML + CSS + JavaScript with no build step, no bundler and no
+# third-party libraries. Everything it needs is in the repository.
+#
+# To run it you need:
+#
+#   1. Any static file server. Python 3 is the convenient one because it ships
+#      with macOS and most Linux distributions:
+#
+#          python3 -m http.server 8081
+#
+#      Then open http://127.0.0.1:8081
+#
+#      Anything equivalent works just as well, for example:
+#          npx serve .
+#          php -S 127.0.0.1:8081
+#
+#   2. A browser with Canvas 2D and Web Audio — any current version of Chrome,
+#      Firefox, Safari or Edge.
+#
+# Do NOT open index.html directly from the filesystem. Under file:// the browser
+# blocks the fetch() calls the audio loader uses, so music and sound effects fail
+# silently while the rest of the game appears to work.
+#
+# Optional, and only for development:
+#
+#   ffmpeg   — used to inspect and re-encode the audio in assets/audio/.
+#              Not needed to play or to modify the game.

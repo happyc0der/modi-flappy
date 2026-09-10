@@ -35,7 +35,10 @@ canvas {
   display: block;
   background: #6b7d8a;
   touch-action: none;
-  height: min(810px, calc(100vh - 32px));
+  /* clamp, not min: a viewport reporting 0 height (a hidden or backgrounded
+     tab does this) would otherwise make calc() negative and collapse the
+     canvas to nothing. */
+  height: clamp(240px, calc(100vh - 32px), 810px);
   width: auto;
   aspect-ratio: 540 / 810;
 }
