@@ -35,7 +35,11 @@
   const GRAVITY = 0.38;
   const FLAP = -9.87;
   const BIRD_X = 108;
-  const BIRD_R = 20; // forgiving hitbox radius
+  const BIRD_R = 16; // forgiving hitbox radius
+  // The character is drawn at this fraction of its authored size. The art was
+  // authored large and drifted larger during iteration, leaving the silhouette
+  // ~1.7x the hitbox -- which reads as much harder than the game actually is.
+  const MODI_SCALE = 0.75;
   const MAX_FALL = 13;
 
   const PIPE_WIDTH = 81;
@@ -1456,7 +1460,9 @@
   function updateGraceHUD() {
     if (inGrace()) {
       graceEl.classList.remove("hidden");
-      graceEl.textContent = `GET READY — ${Math.ceil(graceSteps / 60)}`;
+      // No countdown number: the window is 1.2s, so ceil() showed "2" for only
+      // 0.2s before dropping to "1", which read as a stuck or broken timer.
+      graceEl.textContent = "GET READY";
     } else {
       graceEl.classList.add("hidden");
     }
@@ -1520,7 +1526,7 @@
       pipe.drips.push({
         ox: 8 + Math.random() * (PIPE_WIDTH - 16),
         side: i % 2 === 0 ? "top" : "bottom",
-        len: 4 + Math.random() * 12,
+        len: 3 + Math.random() * 8,
         speed: 0.8 + Math.random() * 1.6,
       });
     }
@@ -1554,10 +1560,15 @@
   }
 
   function stepGame() {
-    const speed = state === "playing" && !inGrace() ? speedFor(score) : SPEED_START * 0.35;
+    // Pipes stop dead on death, so the background has to stop with them or the
+    // world visibly slides out from under the frozen obstacles.
+    const speed =
+      state === "dead" ? 0
+      : state === "playing" && !inGrace() ? speedFor(score)
+      : SPEED_START * 0.35; // idle drift on the menu and during the countdown
     scrollX += speed;
 
-    stepAmbient(speed);
+    stepAmbient();
 
     if (shake > 0) shake *= 0.88;
     if (flash > 0) flash -= 0.08;
@@ -1622,8 +1633,10 @@
       p.x -= speed;
 
       for (const d of p.drips) {
+        // Capped short: these hang from the top mouth INTO the playable gap,
+        // and a long strand reads like part of the obstacle.
         d.len += d.speed * 0.16;
-        if (d.len > 26) d.len = 3;
+        if (d.len > 15) d.len = 3;
       }
       for (const b of p.bubbles) b.phase += 0.09;
 
@@ -1641,7 +1654,9 @@
     checkCollisions();
   }
 
-  function stepAmbient(speed) {
+  // Ambient drift is deliberately independent of game speed -- smoke and crows
+  // read as distance, so they should not accelerate as the pipes do.
+  function stepAmbient() {
     for (const m of motes) {
       m.x -= m.sp;
       m.ph += 0.03;
@@ -1663,7 +1678,6 @@
         c.y = 60 + Math.random() * 170;
       }
     }
-    void speed;
   }
 
   // The gap is now literally the gap: gapTop/gapBottom are the same lines the
@@ -1896,6 +1910,9 @@
     ctx.save();
     ctx.translate(BIRD_X, bird.y);
     ctx.rotate(bird.rot);
+    // Scaling here rather than in the sprite keeps every authored proportion --
+    // and the procedural scarf below scales with it for free.
+    ctx.scale(MODI_SCALE, MODI_SCALE);
     if (inGrace()) ctx.globalAlpha = 0.62 + Math.sin(bird.bob * 2.2) * 0.3;
 
     drawScarf();
@@ -2091,9 +2108,9 @@
     gameOverMsg.textContent = `Score: ${score}`;
     gameOverBest.textContent = `Best: ${settings.highScore}`;
     gameOverPanel.classList.remove("hidden");
-    scoreEl.classList.remove("hidden");
-    hintEl.classList.add("hidden");
-    graceEl.classList.add("hidden");
+    // The panel sits above the HUD and states the score itself, so leaving the
+    // HUD score visible underneath just renders it behind an opaque overlay.
+    showHud(false);
   }
 
   function openSettings() {
