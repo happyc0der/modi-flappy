@@ -162,5 +162,3 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 - **The crash sound is explicit.** `assets/audio/flap.mp3` is a clip of Hindi
   profanity. It plays every time you die. Turn the SFX slider down if that's a
   problem where you are.
-- This is a private joke project about a sitting head of government. Keep that in
-  mind before making the repository public.
