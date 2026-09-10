@@ -22,10 +22,15 @@ with Canvas 2D path calls in `game.js`; there are no image assets at all.
 You need Python 3 (or any static file server) and a modern browser.
 
 ```bash
-python3 -m http.server 8081
+python3 serve.py
 ```
 
-Then open <http://127.0.0.1:8081>.
+Then open <http://127.0.0.1:8081>. Set `PORT` to use a different port.
+
+`serve.py` is `python3 -m http.server` plus a `POST /__shutdown` endpoint, which is
+what lets the in-game **Quit** button stop the server as well as the page. Plain
+`python3 -m http.server 8081` works just as well if you'd rather — Quit will then
+shut the page down and tell you the server is still running.
 
 Don't open `index.html` straight off the filesystem — `file://` blocks the `fetch()`
 calls the audio loader uses, so the music and sound effects will silently not work.
@@ -41,6 +46,17 @@ calls the audio loader uses, so the music and sound effects will silently not wo
 
 Flapping during the "GET READY" countdown starts the run immediately rather than
 being swallowed.
+
+There's no pause key — the game auto-pauses when the tab loses focus and resumes
+when it comes back, so you won't return to a dead bird.
+
+### Quit
+
+The **Quit** button on the menu is a real teardown, not a pause. It cancels the
+animation loop, closes the `AudioContext` so the OS audio device is released,
+drops the sprites and clears the canvas — and asks the server to shut down too.
+Nothing restarts afterwards; you reload the page (and restart the server) to play
+again. It takes two clicks, since it sits next to Start and can't be undone.
 
 ## Settings
 
@@ -93,10 +109,15 @@ detect one that's struggling.
 index.html          markup, HUD, and the menu / game-over / settings panels
 style.css           page chrome, panels, HUD
 game.js             everything else, in labelled sections:
-                    CONFIG · SPRITES · AUDIO · SIMULATION · RENDER · UI
+                    CONFIG · SPRITES · AUDIO · SIMULATION · RENDER · QUIT · UI
+serve.py            static server with a shutdown endpoint (optional)
 assets/audio/       theme.mp3 (music), flap.mp3 (crash sound)
 docs/screenshot.png the image above
 ```
+
+The game itself is entirely client-side — `serve.py` hands over static files and
+is not otherwise involved. There is no backend, no state on a server, and nothing
+to deploy beyond the files in this directory.
 
 ## Tweaking it
 

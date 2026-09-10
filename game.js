@@ -116,6 +116,9 @@
   const goSettingsBtn = document.getElementById("go-settings");
   const settingsBackBtn = document.getElementById("settings-back");
   const settingsResetBtn = document.getElementById("settings-reset");
+  const menuQuitBtn = document.getElementById("menu-quit");
+  const stoppedPanel = document.getElementById("stopped");
+  const stoppedMsg = document.getElementById("stopped-msg");
   const musicVolInput = document.getElementById("music-vol");
   const sfxVolInput = document.getElementById("sfx-vol");
   const musicVolVal = document.getElementById("music-vol-val");
@@ -140,6 +143,9 @@
   let scrollX = 0; // world scroll in px, drives every parallax layer
   let graceSteps = 0;
   let paused = false;
+  let rafId = 0;
+  let stopped = false;
+  let quitArmed = 0; // timestamp of the first Quit click, for the confirm step
   let flapAnim = 0; // counts down after a flap, drives the arm sprite
   let shake = 0;
   let flash = 0;
@@ -1319,6 +1325,7 @@
   let buffersRequested = false;
 
   function getAudioCtx() {
+    if (stopped) return null;
     if (!audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
@@ -1536,7 +1543,7 @@
   // Music follows game state; called both on transitions and on the first user
   // gesture, since the context cannot start before one.
   function syncMusicToState() {
-    if (!userGestured) return;
+    if (stopped || !userGestured) return;
     const ac = getAudioCtx();
     if (!ac) return;
     loadAudioBuffers();
@@ -1695,7 +1702,7 @@
   }
 
   function flap() {
-    if (listeningFor || state !== "playing" || paused) return;
+    if (stopped || listeningFor || state !== "playing" || paused) return;
     // A flap during the countdown starts the run immediately rather than being
     // swallowed -- the old build ignored input here and read as broken.
     if (graceSteps > 0) {
@@ -2280,7 +2287,7 @@
     render();
     probeQuality(frameMs);
 
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
 
   // ==========================================================================
@@ -2335,6 +2342,68 @@
     else showMainMenu();
   }
 
+  // ==========================================================================
+  // QUIT
+  //
+  // Tears the whole thing down rather than pausing it: the animation loop is
+  // cancelled (not just short-circuited), the AudioContext is closed so the OS
+  // audio device is released, and the canvas is cleared.
+  //
+  // "Backend" is generous -- the game is entirely client-side and the only
+  // server-side piece is whatever is serving these static files. serve.py
+  // exposes POST /__shutdown so it can be stopped too; under plain
+  // `python3 -m http.server` that request just fails and only the page stops.
+  // ==========================================================================
+
+  function shutdownServer() {
+    // keepalive so the request still goes out while we tear the page down
+    return fetch("/__shutdown", { method: "POST", keepalive: true })
+      .then((r) => r.ok)
+      .catch(() => false);
+  }
+
+  function killFrontend() {
+    stopped = true;
+
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = 0;
+
+    stopCrashSound();
+    stopTheme(0);
+    stopMenuMusic(0);
+    if (audioCtx) {
+      audioCtx.close().catch(() => {});
+      audioCtx = null;
+      musicGain = null;
+    }
+
+    pipes.length = 0;
+    particles.length = 0;
+    popups.length = 0;
+    motes.length = 0;
+    smoke.length = 0;
+    crows.length = 0;
+    sprites = null;
+
+    ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#120c06";
+    ctx.fillRect(0, 0, W, H);
+
+    state = "stopped";
+    hideAllPanels();
+    showHud(false);
+    stoppedPanel.classList.remove("hidden");
+  }
+
+  async function killGame() {
+    const serverStopped = await shutdownServer();
+    killFrontend();
+    stoppedMsg.textContent = serverStopped
+      ? "Game and server both shut down."
+      : "Game shut down. The file server is still running \u2014 stop it with Ctrl+C.";
+  }
+
   function cancelBinding() {
     listeningFor = null;
     bindFlapBtn.classList.remove("listening");
@@ -2369,6 +2438,28 @@
     noteUserGesture();
     startGame();
   });
+  // Two-step confirm: it sits next to Start and is not undoable.
+  menuQuitBtn.addEventListener("click", () => {
+    const now = Date.now();
+    if (!quitArmed || now - quitArmed > 4000) {
+      quitArmed = now;
+      menuQuitBtn.textContent = "Really quit?";
+      menuQuitBtn.classList.add("armed");
+      setTimeout(() => {
+        if (quitArmed && Date.now() - quitArmed >= 4000) disarmQuit();
+      }, 4100);
+      return;
+    }
+    disarmQuit();
+    killGame();
+  });
+
+  function disarmQuit() {
+    quitArmed = 0;
+    menuQuitBtn.textContent = "Quit";
+    menuQuitBtn.classList.remove("armed");
+  }
+
   menuSettingsBtn.addEventListener("click", openSettings);
   retryBtn.addEventListener("click", startGame);
   goMainBtn.addEventListener("click", showMainMenu);
@@ -2412,6 +2503,7 @@
   bindRestartBtn.addEventListener("click", () => startBinding("restart", bindRestartBtn));
 
   window.addEventListener("keydown", (e) => {
+    if (stopped) return;
     if (handleKeyBinding(e)) {
       e.preventDefault();
       return;
@@ -2438,6 +2530,7 @@
   });
 
   canvas.addEventListener("pointerdown", (e) => {
+    if (stopped) return;
     e.preventDefault();
     noteUserGesture();
     if (state === "playing") flap();
@@ -2479,9 +2572,10 @@
   applyAudioVolumes();
   updateHint();
   showMainMenu();
-  requestAnimationFrame(loop);
+  rafId = requestAnimationFrame(loop);
 
   window.addEventListener("resize", () => {
+    if (stopped) return;
     const want = clamp(window.devicePixelRatio || 1, 1, 2);
     if (Math.abs(want - RENDER_SCALE) > 0.01) {
       setupCanvas();

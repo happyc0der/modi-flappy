@@ -265,6 +265,45 @@ canvas {
   box-shadow: 0 4px 0 #150f08;
 }
 
+/* Destructive, and it sits next to Start, so it is visually separated and
+   deliberately quiet until hovered. */
+.btn.danger {
+  margin-top: 4px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  background: transparent;
+  color: #d98a7a;
+  border: 1px solid #7a4038;
+  box-shadow: none;
+}
+
+.btn.danger:hover {
+  background: #8c3326;
+  border-color: #b3574a;
+  color: #fff;
+}
+
+.btn.danger.armed {
+  background: #b3392a;
+  border-color: #e0705f;
+  color: #fff;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.btn.danger:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+#stopped {
+  z-index: 40;
+  background: rgba(8, 5, 3, 0.94);
+}
+
+#stopped h1 {
+  color: #d98a7a;
+}
+
 .btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.08);

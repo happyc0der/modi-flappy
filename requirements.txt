@@ -9,14 +9,17 @@
 #
 # To run it you need:
 #
-#   1. Any static file server. Python 3 is the convenient one because it ships
-#      with macOS and most Linux distributions:
+#   1. Python 3, to run the bundled static server:
 #
+#          python3 serve.py          # http://127.0.0.1:8081
+#          PORT=9000 python3 serve.py
+#
+#      serve.py uses only the standard library. It is `python3 -m http.server`
+#      plus a POST /__shutdown endpoint, which is what lets the in-game Quit
+#      button stop the server as well as the page.
+#
+#      Any other static server works too, you just lose that one feature:
 #          python3 -m http.server 8081
-#
-#      Then open http://127.0.0.1:8081
-#
-#      Anything equivalent works just as well, for example:
 #          npx serve .
 #          php -S 127.0.0.1:8081
 #
