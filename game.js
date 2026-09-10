@@ -7,7 +7,10 @@
 
   const STORAGE_KEY = "modiFlappySettings";
   const BG_MUSIC_FILE = "assets/audio/theme.mp3";
-  const FLAP_SFX_FILE = "assets/audio/flap.mp3";
+  const CRASH_SFX_FILE = "assets/audio/flap.mp3";
+  // The theme opens with a groan and a quiet lead-in; the first musical phrase
+  // attacks at 1.63s, so both playback and looping start just before it.
+  const MUSIC_LOOP_START = 1.61;
 
   const DEFAULT_SETTINGS = {
     musicVolume: 0.45,
@@ -101,7 +104,6 @@
   const bindFlapBtn = document.getElementById("bind-flap");
   const bindFlapAltBtn = document.getElementById("bind-flap-alt");
   const bindRestartBtn = document.getElementById("bind-restart");
-  const bgMusic = document.getElementById("bg-music");
 
   // ==========================================================================
   // STATE
@@ -117,7 +119,6 @@
   let accumulator = 0;
   let scrollX = 0; // world scroll in px, drives every parallax layer
   let graceSteps = 0;
-  let musicStarted = false;
   let paused = false;
   let flapAnim = 0; // counts down after a flap, drives the arm sprite
   let shake = 0;
@@ -1282,13 +1283,20 @@
   // One shared AudioContext for everything. The previous build created a fresh
   // context per sound effect, which silently hit the browser's context cap after
   // a handful of points and killed all audio for the rest of the session.
+  //
+  // Music runs through Web Audio rather than an <audio> element so the theme can
+  // loop from a precise offset: the source file opens with a groan and a quiet
+  // lead-in, and MUSIC_LOOP_START skips straight to the first musical phrase.
+  // Trimming the file instead would mean either re-encoding (which adds encoder
+  // delay, so the loop hiccups every pass) or a stream copy (which can only cut
+  // on a frame boundary, landing mid-attack and clicking).
   // ==========================================================================
 
   let audioCtx = null;
-  let flapBuffer = null;
-  let flapLoadStarted = false;
-  const activeFlaps = [];
-  let musicFadeToken = 0;
+  let musicGain = null; // music bus -- theme and menu both route through here
+  let themeBuffer = null;
+  let crashBuffer = null;
+  let buffersRequested = false;
 
   function getAudioCtx() {
     if (!audioCtx) {
@@ -1299,62 +1307,228 @@
       } catch {
         return null;
       }
+      musicGain = audioCtx.createGain();
+      musicGain.gain.value = settings.musicVolume;
+      musicGain.connect(audioCtx.destination);
     }
     if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
     return audioCtx;
   }
 
-  function loadFlapBuffer() {
-    if (flapLoadStarted) return;
+  function loadAudioBuffers() {
+    if (buffersRequested) return;
     const ac = getAudioCtx();
     if (!ac) return;
-    flapLoadStarted = true;
-    fetch(FLAP_SFX_FILE)
-      .then((r) => r.arrayBuffer())
-      .then((buf) => ac.decodeAudioData(buf))
-      .then((decoded) => {
-        flapBuffer = decoded;
+    buffersRequested = true;
+    const grab = (url) =>
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        .then((b) => ac.decodeAudioData(b));
+
+    grab(BG_MUSIC_FILE)
+      .then((b) => {
+        themeBuffer = b;
+        if (state === "playing") startTheme();
       })
-      .catch(() => {
-        flapLoadStarted = false;
-      });
+      .catch(() => {});
+    grab(CRASH_SFX_FILE)
+      .then((b) => {
+        crashBuffer = b;
+      })
+      .catch(() => {});
   }
 
-  function playFlapSound() {
-    if (settings.sfxVolume <= 0) return;
-    const ac = getAudioCtx();
-    if (!ac || !flapBuffer) return;
+  function applyAudioVolumes() {
+    if (musicGain) musicGain.gain.value = settings.musicVolume;
+  }
 
-    // The sample is 3.1s long; without a cap and a hard gate, flapping twice a
-    // second stacks half a dozen overlapping copies into mush.
-    while (activeFlaps.length >= 3) {
-      const oldest = activeFlaps.shift();
-      try {
-        oldest.stop();
-      } catch {
-        /* already ended */
-      }
+  // --- gameplay theme --------------------------------------------------------
+
+  let themeSource = null;
+
+  function startTheme() {
+    stopMenuMusic(180);
+    const ac = getAudioCtx();
+    if (!ac || !themeBuffer || themeSource) return;
+    const src = ac.createBufferSource();
+    src.buffer = themeBuffer;
+    src.loop = true;
+    // Skip the groan on the first pass and on every loop thereafter.
+    src.loopStart = Math.min(MUSIC_LOOP_START, themeBuffer.duration - 0.05);
+    src.loopEnd = themeBuffer.duration;
+    src.connect(musicGain);
+    src.start(0, src.loopStart);
+    themeSource = src;
+  }
+
+  function stopTheme(fadeMs = 650) {
+    const src = themeSource;
+    if (!src) return;
+    themeSource = null;
+    const ac = audioCtx;
+    if (!ac) return;
+    // Ramp on its own gain node so a fade never fights the user's volume slider.
+    const g = ac.createGain();
+    try {
+      src.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+    src.connect(g);
+    g.connect(musicGain);
+    const t = ac.currentTime;
+    g.gain.setValueAtTime(1, t);
+    g.gain.linearRampToValueAtTime(0.0001, t + fadeMs / 1000);
+    try {
+      src.stop(t + fadeMs / 1000 + 0.02);
+    } catch {
+      /* already stopped */
+    }
+  }
+
+  // --- menu music ------------------------------------------------------------
+  //
+  // Synthesised rather than a recording: a tanpura-style drone under a simple
+  // phrase in Bilaval (the major-scale raga). Deliberately generic mood music --
+  // not the national anthem, which would need a real recording and which we
+  // would only be approximating from memory.
+
+  const MENU_SA = 146.83; // D3
+  const SEMI = (n) => MENU_SA * Math.pow(2, n / 12);
+  // [scale degree in semitones from Sa, beats]
+  const MENU_PHRASE = [
+    [0, 1], [2, 1], [4, 1], [5, 1],
+    [7, 2], [5, 1], [4, 1],
+    [2, 2], [0, 2],
+    [4, 1], [7, 1], [9, 2],
+    [7, 1], [5, 1], [4, 1], [2, 1],
+    [0, 4],
+  ];
+  const MENU_BEAT = 0.42; // seconds per beat
+  const MENU_LEN = MENU_PHRASE.reduce((a, n) => a + n[1], 0) * MENU_BEAT;
+
+  let menuNodes = null;
+  let menuTimer = null;
+
+  function startMenuMusic() {
+    const ac = getAudioCtx();
+    if (!ac || menuNodes) return;
+
+    const bus = ac.createGain();
+    bus.gain.value = 0;
+    bus.connect(musicGain);
+    bus.gain.linearRampToValueAtTime(0.5, ac.currentTime + 0.8);
+
+    // drone: Sa and Pa, slightly detuned against each other so it breathes
+    const drones = [];
+    for (const [mult, detune, gainv] of [[1, -4, 0.13], [1, 5, 0.11], [1.5, 0, 0.09], [0.5, 0, 0.1]]) {
+      const o = ac.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = MENU_SA * mult;
+      o.detune.value = detune;
+      const lp = ac.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 620;
+      const g = ac.createGain();
+      g.gain.value = gainv;
+      o.connect(lp);
+      lp.connect(g);
+      g.connect(bus);
+      o.start();
+      drones.push(o);
     }
 
-    const src = ac.createBufferSource();
-    src.buffer = flapBuffer;
-    src.playbackRate.value = 1.15;
-    const gain = ac.createGain();
-    const t = ac.currentTime;
-    const vol = Math.min(1, settings.sfxVolume + 0.1);
-    gain.gain.setValueAtTime(vol, t);
-    gain.gain.setValueAtTime(vol, t + 0.38);
-    gain.gain.linearRampToValueAtTime(0.0001, t + 0.45);
-    src.connect(gain);
-    gain.connect(ac.destination);
-    src.start(t);
-    src.stop(t + 0.46);
-    activeFlaps.push(src);
-    src.onended = () => {
-      const i = activeFlaps.indexOf(src);
-      if (i >= 0) activeFlaps.splice(i, 1);
+    menuNodes = { bus, drones, voices: [] };
+    let nextAt = ac.currentTime + 0.4;
+    const schedulePass = () => {
+      if (!menuNodes) return;
+      let t = nextAt;
+      for (const [deg, beats] of MENU_PHRASE) {
+        const dur = beats * MENU_BEAT;
+        playMenuNote(ac, menuNodes, SEMI(deg), t, dur * 0.92);
+        t += dur;
+      }
+      nextAt = t;
+      // re-arm shortly before the pass ends so notes are always queued ahead
+      menuTimer = setTimeout(schedulePass, Math.max(120, (MENU_LEN - 0.35) * 1000));
     };
+    schedulePass();
   }
+
+  function playMenuNote(ac, nodes, freq, at, dur) {
+    const o = ac.createOscillator();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(freq, at);
+    // a small scoop into the note, which is what makes it read as a flute
+    o.frequency.setValueAtTime(freq * 0.97, at);
+    o.frequency.linearRampToValueAtTime(freq, at + 0.06);
+
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 2200;
+
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(0.22, at + 0.07);
+    g.gain.setValueAtTime(0.22, at + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(nodes.bus);
+    o.start(at);
+    o.stop(at + dur + 0.05);
+  }
+
+  function stopMenuMusic(fadeMs = 500) {
+    if (menuTimer) {
+      clearTimeout(menuTimer);
+      menuTimer = null;
+    }
+    const nodes = menuNodes;
+    if (!nodes || !audioCtx) return;
+    menuNodes = null;
+    const t = audioCtx.currentTime;
+    nodes.bus.gain.cancelScheduledValues(t);
+    nodes.bus.gain.setValueAtTime(nodes.bus.gain.value, t);
+    nodes.bus.gain.linearRampToValueAtTime(0.0001, t + fadeMs / 1000);
+    for (const o of nodes.drones) {
+      try {
+        o.stop(t + fadeMs / 1000 + 0.05);
+      } catch {
+        /* already stopped */
+      }
+    }
+  }
+
+  // Browsers keep an AudioContext suspended until the user interacts, and
+  // currentTime does not advance while suspended -- so anything scheduled before
+  // then would all fire at once on resume. Nothing starts until this is set.
+  let userGestured = false;
+
+  function noteUserGesture() {
+    if (userGestured) return;
+    userGestured = true;
+    getAudioCtx();
+    syncMusicToState();
+  }
+
+  // Music follows game state; called both on transitions and on the first user
+  // gesture, since the context cannot start before one.
+  function syncMusicToState() {
+    if (!userGestured) return;
+    const ac = getAudioCtx();
+    if (!ac) return;
+    loadAudioBuffers();
+    if (state === "playing") {
+      startTheme();
+    } else if (state === "menu") {
+      stopTheme(300);
+      startMenuMusic();
+    }
+  }
+
+  // --- sound effects ---------------------------------------------------------
 
   function tone({ type, from, to, dur, vol, delay = 0 }) {
     if (settings.sfxVolume <= 0) return;
@@ -1374,62 +1548,81 @@
     osc.stop(t + dur + 0.02);
   }
 
+  // Short synthesised whoosh. The voice clip used to play here, but at 3.1s it
+  // stacked into mush when flapping twice a second -- it now lands on the crash,
+  // where it can play once and in full.
+  function playFlapSound() {
+    if (settings.sfxVolume <= 0) return;
+    const ac = getAudioCtx();
+    if (!ac) return;
+    const t = ac.currentTime;
+
+    const noise = ac.createBufferSource();
+    const len = Math.floor(ac.sampleRate * 0.14);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    noise.buffer = buf;
+
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.exponentialRampToValueAtTime(1900, t + 0.12);
+    bp.Q.value = 0.9;
+
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.16 * settings.sfxVolume, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+
+    noise.connect(bp);
+    bp.connect(g);
+    g.connect(ac.destination);
+    noise.start(t);
+    noise.stop(t + 0.16);
+
+    tone({ type: "sine", from: 320, to: 520, dur: 0.08, vol: 0.07 });
+  }
+
   function playScoreSound() {
     tone({ type: "triangle", from: 620, to: 990, dur: 0.1, vol: 0.16 });
     tone({ type: "sine", from: 940, to: 1360, dur: 0.09, vol: 0.09, delay: 0.05 });
   }
 
-  function playDeathSound() {
-    tone({ type: "sawtooth", from: 230, to: 62, dur: 0.28, vol: 0.2 });
-    tone({ type: "square", from: 128, to: 46, dur: 0.34, vol: 0.13, delay: 0.09 });
-  }
-
-  function applyAudioVolumes() {
-    bgMusic.volume = settings.musicVolume;
-  }
-
-  function ensureMusic() {
-    musicFadeToken++;
-    if (!bgMusic.src.endsWith(BG_MUSIC_FILE)) {
-      bgMusic.src = BG_MUSIC_FILE;
-      bgMusic.load();
-    }
-    applyAudioVolumes();
-    if (musicStarted && !bgMusic.paused) return;
-    bgMusic
-      .play()
-      .then(() => {
-        musicStarted = true;
-      })
-      .catch(() => {});
-  }
-
-  function fadeMusicOut(ms = 650) {
-    const token = ++musicFadeToken;
-    const startVol = bgMusic.volume;
-    const t0 = performance.now();
-    const tick = () => {
-      if (token !== musicFadeToken) return; // a newer fade or a restart took over
-      const k = Math.min(1, (performance.now() - t0) / ms);
-      bgMusic.volume = startVol * (1 - k);
-      if (k < 1) {
-        requestAnimationFrame(tick);
-      } else {
-        bgMusic.pause();
-        bgMusic.currentTime = 0;
-        bgMusic.volume = settings.musicVolume;
-        musicStarted = false;
+  // The voice clip, played once and in full on a crash.
+  let crashSource = null;
+  function playCrashSound() {
+    tone({ type: "sawtooth", from: 230, to: 62, dur: 0.26, vol: 0.18 });
+    if (settings.sfxVolume <= 0) return;
+    const ac = getAudioCtx();
+    if (!ac || !crashBuffer) return;
+    if (crashSource) {
+      try {
+        crashSource.stop();
+      } catch {
+        /* already ended */
       }
+    }
+    const src = ac.createBufferSource();
+    src.buffer = crashBuffer;
+    const g = ac.createGain();
+    g.gain.value = Math.min(1, settings.sfxVolume + 0.1);
+    src.connect(g);
+    g.connect(ac.destination);
+    src.start(ac.currentTime + 0.06);
+    crashSource = src;
+    src.onended = () => {
+      if (crashSource === src) crashSource = null;
     };
-    tick();
   }
 
-  function stopMusicNow() {
-    musicFadeToken++;
-    bgMusic.pause();
-    bgMusic.currentTime = 0;
-    bgMusic.volume = settings.musicVolume;
-    musicStarted = false;
+  function stopCrashSound() {
+    if (!crashSource) return;
+    try {
+      crashSource.stop();
+    } catch {
+      /* already ended */
+    }
+    crashSource = null;
   }
 
   // ==========================================================================
@@ -1476,8 +1669,8 @@
     paused = false;
     graceSteps = GRACE_STEPS;
     resetProbe(); // don't judge the machine on the first frames of a new run
-    ensureMusic();
-    loadFlapBuffer();
+    loadAudioBuffers();
+    syncMusicToState();
     updateGraceHUD();
   }
 
@@ -1696,8 +1889,8 @@
 
   function die() {
     if (state !== "playing") return;
-    playDeathSound();
-    fadeMusicOut();
+    playCrashSound();
+    stopTheme(500);
     shake = 16;
     flash = 1;
     addParticles(BIRD_X, bird.y, 22, ["#e8801f", "#f4efe6", "#8a5c2a", "#4a5c22"]);
@@ -2088,7 +2281,8 @@
 
   function showMainMenu() {
     state = "menu";
-    stopMusicNow();
+    stopCrashSound();
+    syncMusicToState();
     hideAllPanels();
     mainMenu.classList.remove("hidden");
     showHud(false);
@@ -2158,7 +2352,7 @@
   }
 
   menuStartBtn.addEventListener("click", () => {
-    getAudioCtx();
+    noteUserGesture();
     startGame();
   });
   menuSettingsBtn.addEventListener("click", openSettings);
@@ -2224,17 +2418,22 @@
     }
     if (state === "menu" && (e.code === "Enter" || isFlapKey(e.code))) {
       e.preventDefault();
-      getAudioCtx();
+      noteUserGesture();
       startGame();
     }
   });
 
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    getAudioCtx();
+    noteUserGesture();
     if (state === "playing") flap();
     else if (state === "menu") startGame();
   });
+
+  // Any first interaction unlocks audio -- clicking Settings should start the
+  // menu music too, not only pressing Start.
+  window.addEventListener("pointerdown", noteUserGesture, { once: true });
+  window.addEventListener("keydown", noteUserGesture, { once: true });
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -2265,7 +2464,6 @@
   applySettingsToUI();
   applyAudioVolumes();
   updateHint();
-  if (!bgMusic.src.endsWith(BG_MUSIC_FILE)) bgMusic.src = BG_MUSIC_FILE;
   showMainMenu();
   requestAnimationFrame(loop);
 

@@ -87,7 +87,9 @@
       </div>
     </div>
   </div>
-  <audio id="bg-music" src="assets/audio/theme.mp3" loop preload="auto"></audio>
+  <!-- Music is loaded and looped through Web Audio (see the AUDIO section of
+       game.js) so the theme can loop from a precise offset, skipping the groan
+       the source file opens with. -->
   <script src="game.js"></script>
 </body>
 </html>
